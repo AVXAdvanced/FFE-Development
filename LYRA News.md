@@ -10,11 +10,17 @@ and is currently in the early stages of Beta.
 [##########################                                                             ] ~30%
 
 ✅ Core Functionality
+
 ✅ File Browsing
+
 🟨 UI
+
 🟨 Stability
+
 🟥 Code Cleanup
+
 🟥 Proper Definition Naming
+
 🟥 Text
 
 ## Estimated Release Date
