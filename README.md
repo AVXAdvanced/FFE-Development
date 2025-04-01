@@ -87,7 +87,7 @@ featuring a Graphical User Interface.
 The latest TUI release for FFE,
 featuring a Text-Based User Interface.
 
-Thanks for Visiting the FFE-Development GitHub Repository.
+**Thanks for Visiting the FFE-Development GitHub Repository.**
 
 
 
