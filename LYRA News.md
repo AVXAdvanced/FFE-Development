@@ -7,13 +7,13 @@ and is currently in the early stages of Beta.
 
 ## Progress
 
-[##########################                                                             ] ~30%
+[#########################################                                        ] ~50%
 
 ✅ Core Functionality
 
 ✅ File Browsing
 
-🟨 UI
+✅ UI
 
 🟨 Stability
 
@@ -21,7 +21,7 @@ and is currently in the early stages of Beta.
 
 🟥 Proper Definition Naming
 
-🟥 Text
+🟨 Text
 
 ## Estimated Release Date
 
