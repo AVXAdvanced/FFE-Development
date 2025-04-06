@@ -27,6 +27,6 @@ and is currently in the early stages of Beta.
 
 FFE LYRA is intended to release:
 
-**01/05/2025 - 31/05/2025**
+**04/20/2025 - 05/15/2025**
 
 Thanks for reading!
