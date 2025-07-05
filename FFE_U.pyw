@@ -1,0 +1,1454 @@
+import os
+import requests
+import tkinter as tk
+from tkinter import messagebox
+from cryptography.fernet import Fernet
+from packaging import version
+import re
+import webbrowser
+import threading
+from tkinter import ttk
+
+class HoverButton(tk.Button):
+    def __init__(self, master, **kwargs):
+        # Store the original background color before any modifications
+        self.original_bg = kwargs.get('bg', kwargs.get('background', None))
+        
+        # If no background is provided, use the default button color
+        if not self.original_bg:
+            self.original_bg = "#f0f0f0"
+            kwargs['bg'] = self.original_bg
+        
+        # Initialize the button with provided kwargs
+        tk.Button.__init__(self, master, **kwargs)
+        
+        # Bind hover events
+        self.bind("<Enter>", self.on_enter)
+        self.bind("<Leave>", self.on_leave)
+        
+        # Store the hover color if provided, otherwise create a brighter version of the original
+        self.hover_bg = kwargs.get('activebackground', self.brighten_color(self.original_bg, 20))
+        
+        # Force the button to use the standard look on Windows
+        self['relief'] = 'raised'
+        self['overrelief'] = 'sunken'
+        self['bd'] = 1
+
+    def on_enter(self, e):
+        """Handle mouse enter event."""
+        if 'disabled' not in str(self['state']):
+            self['background'] = self.hover_bg
+
+    def on_leave(self, e):
+        """Handle mouse leave event."""
+        if 'disabled' not in str(self['state']):
+            self['background'] = self.original_bg
+
+    def brighten_color(self, color, brightness_factor):
+        """Brighten the given color by the specified factor."""
+        try:
+            # If color is a name, convert it to RGB
+            if isinstance(color, str) and not color.startswith('#'):
+                color = self.winfo_rgb(color)
+                # Convert from 0-65535 to 0-255
+                r, g, b = [x//256 for x in color]
+                color = f"#{r:02x}{g:02x}{b:02x}"
+            
+            # Process hex colors
+            if isinstance(color, str) and color.startswith('#'):
+                # Handle both #RGB and #RRGGBB formats
+                if len(color) == 4:  # #RGB format
+                    color = f"#{color[1]*2}{color[2]*2}{color[3]*2}"
+                
+                # Extract RGB components
+                if len(color) == 7:  # #RRGGBB format
+                    r, g, b = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))
+                    # Apply brightness factor
+                    r = min(255, r + brightness_factor)
+                    g = min(255, g + brightness_factor)
+                    b = min(255, b + brightness_factor)
+                    return f"#{r:02x}{g:02x}{b:02x}"
+            
+            return color if color else "#f0f0f0"
+            
+        except (ValueError, IndexError, tk.TclError):
+            return color if color else "#f0f0f0"
+
+# Theme colors for the application
+class ThemeColors:
+    THEMES = {
+        "Dark Blue": {
+            "primary_bg": "#0a1124",
+            "secondary_bg": "#0f1936",
+            "text": "#ffffff",
+            "accent": "#2a4180",
+            "button_bg": "#203161",
+            "button_fg": "#ffffff",
+            "button_active": "#3c4f8c",
+            "button_hover": "#2a4180",
+            "entry_bg": "#1a274d",
+            "entry_fg": "#ffffff",
+            "entry_insertbg": "#4a90e2",
+            "border": "#4a4a4a",
+            "success": "#5cb85c",
+            "warning": "#f0ad4e",
+            "error": "#d9534f",
+            "info": "#5bc0de"
+        },
+        "Midnight Purple": {
+            "primary_bg": "#1a1025",
+            "secondary_bg": "#2a1f3a",
+            "text": "#ffffff",
+            "accent": "#614885",
+            "button_bg": "#3a2f4a",
+            "button_fg": "#ffffff",
+            "button_active": "#4a3f5a",
+            "button_hover": "#4a3d5a",
+            "entry_bg": "#2a1f3a",
+            "entry_fg": "#ffffff",
+            "entry_insertbg": "#7a5d9c",
+            "border": "#5a4a6a",
+            "success": "#4a9c6d",
+            "warning": "#bf8f3b",
+            "error": "#bf3e3b",
+            "info": "#5bc0de"
+        },
+        "Dark Green": {
+            "primary_bg": "#0a1f0a",
+            "secondary_bg": "#1a3a1a",
+            "text": "#ffffff",
+            "accent": "#2a5a2a",
+            "button_bg": "#1a3a1a",
+            "button_fg": "#ffffff",
+            "button_active": "#2a5a2a",
+            "button_hover": "#1a4a1a",
+            "entry_bg": "#1a3a1a",
+            "entry_fg": "#ffffff",
+            "entry_insertbg": "#3a7a3a",
+            "border": "#2a5a2a",
+            "success": "#2d8844",
+            "warning": "#bf8f3b",
+            "error": "#bf3e3b",
+            "info": "#5bc0de"
+        },
+        "Cyberpunk": {
+            "primary_bg": "#0a0a1a",
+            "secondary_bg": "#1a1a2a",
+            "text": "#00ff00",
+            "accent": "#ff00ff",
+            "button_bg": "#1a1a2a",
+            "button_fg": "#00fff2",
+            "button_active": "#2a2a3a",
+            "button_hover": "#2a1a3a",
+            "entry_bg": "#1a1a2a",
+            "entry_fg": "#00ff00",
+            "entry_insertbg": "#00ffff",
+            "border": "#ff00ff",
+            "success": "#00ff00",
+            "warning": "#ffff00",
+            "error": "#ff0000",
+            "info": "#00ffff"
+        },
+        "Solarized Dark": {
+            "primary_bg": "#002b36",
+            "secondary_bg": "#073642",
+            "text": "#93a1a1",
+            "accent": "#268bd2",
+            "button_bg": "#073642",
+            "button_fg": "#93a1a1",
+            "button_active": "#0f4b5a",
+            "button_hover": "#0f4b5a",
+            "entry_bg": "#073642",
+            "entry_fg": "#93a1a1",
+            "entry_insertbg": "#268bd2",
+            "border": "#586e75",
+            "success": "#859900",
+            "warning": "#b58900",
+            "error": "#dc322f",
+            "info": "#2aa198"
+        },
+        "Dracula": {
+            "primary_bg": "#282a36",
+            "secondary_bg": "#44475a",
+            "text": "#f8f8f2",
+            "accent": "#bd93f9",
+            "button_bg": "#44475a",
+            "button_fg": "#f8f8f2",
+            "button_active": "#6272a4",
+            "button_hover": "#6272a4",
+            "entry_bg": "#44475a",
+            "entry_fg": "#f8f8f2",
+            "entry_insertbg": "#bd93f9",
+            "border": "#6272a4",
+            "success": "#50fa7b",
+            "warning": "#f1fa8c",
+            "error": "#ff5555",
+            "info": "#8be9fd"
+        }
+    }
+
+    @staticmethod
+    def get_dialog_colors(dialog_type, theme_name):
+        theme = ThemeColors.THEMES[theme_name]
+        colors = {
+            "info": theme["accent"],
+            "warning": theme["warning"],
+            "error": theme["error"],
+            "question": theme["success"]
+        }
+        return colors.get(dialog_type, theme["accent"])
+
+    @staticmethod
+    def get_button_text_color(theme_name, button_type="default"):
+        if theme_name == "Cyberpunk":
+            if button_type in ["success", "error", "warning"]:
+                return "#000000"
+            return "#00fff2"
+        return ThemeColors.THEMES[theme_name].get("button_fg", "#ffffff")
+
+class SettingsWindow(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.title("Settings")
+        self.geometry("600x600")  # Increased height from 500 to 600
+        self.resizable(False, False)
+        
+        # Make window modal
+        self.transient(parent)
+        self.grab_set()
+        self.focus_set()
+        
+        # Get current theme colors
+        self.current_theme = self.parent.current_theme if hasattr(self.parent, 'current_theme') else "Dark Blue"
+        self.theme_colors = ThemeColors.THEMES.get(self.current_theme, ThemeColors.THEMES["Dark Blue"])
+        
+        # Create main container with adjusted padding
+        main_container = tk.Frame(self, bg=self.theme_colors["secondary_bg"], padx=20, pady=15)  # Reduced top padding from 20 to 10
+        main_container.pack(expand=True, fill="both")
+        
+        # Title
+        title_label = tk.Label(
+            main_container,
+            text="Settings",
+            font=("Segoe UI", 20, "bold"),
+            bg=self.theme_colors["secondary_bg"],
+            fg=self.theme_colors["text"],
+            anchor="w"
+        )
+        title_label.pack(fill="x", pady=(0, 15))
+        
+        # Separator
+        separator = tk.Frame(main_container, height=2, bg=self.theme_colors["accent"])
+        separator.pack(fill="x", pady=(0, 20))
+        
+        # Configure ttk styles for notebook and tabs
+        style = ttk.Style()
+        style.theme_use('default')  # Use default theme as base
+        
+        # Configure frame style
+        style.configure('TFrame', 
+                      background=self.theme_colors["secondary_bg"],
+                      relief='flat')
+
+        # Configure notebook style
+        style.configure('TNotebook', 
+                     background=self.theme_colors["secondary_bg"], 
+                     borderwidth=0)
+
+        style.map('TNotebook',
+                background=[('selected', self.theme_colors["secondary_bg"])])
+
+        # Create a frame to hold the notebook and scrollbar
+        notebook_container = ttk.Frame(main_container)
+        notebook_container.pack(fill="both", expand=True, pady=(0, 10))
+
+        notebook_wrapper = ttk.Frame(notebook_container)
+        notebook_wrapper.pack(fill="both", expand=True)
+
+        # Create canvas and scrollbar with proper theming
+        canvas = tk.Canvas(notebook_wrapper, 
+                         bg=self.theme_colors["secondary_bg"], 
+                         highlightthickness=0, 
+                         bd=0)
+        
+        # Configure scrollbar style
+        style.configure('Vertical.TScrollbar', 
+                      background=self.theme_colors["accent"],
+                      troughcolor=self.theme_colors["secondary_bg"],
+                      arrowcolor=self.theme_colors["text"],
+                      bordercolor=self.theme_colors["border"])
+                      
+        style.map('Vertical.TScrollbar',
+                background=[('active', self.theme_colors["accent"])])
+        
+        scrollbar = ttk.Scrollbar(notebook_wrapper, 
+                                orient="vertical", 
+                                command=canvas.yview,
+                                style='Vertical.TScrollbar')
+        
+        # Create scrollable frame
+        scrollable_frame = ttk.Frame(canvas)
+        
+        # Configure the canvas
+        def _on_frame_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            
+        scrollable_frame.bind("<Configure>", _on_frame_configure)
+        
+        # Create window in canvas for the scrollable frame
+        canvas.create_window((0, 0), 
+                           window=scrollable_frame, 
+                           anchor="nw", 
+                           tags=("scrollable_frame",))
+                           
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Pack canvas and scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Update scroll region after all widgets are added
+        def _on_configure(event):
+            canvas.itemconfig("scrollable_frame", width=event.width-5)  # Small offset for scrollbar
+            
+        canvas.bind('<Configure>', _on_configure)
+        
+        # Bind mouse wheel to scroll
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            return "break"
+            
+        # Bind mouse wheel to canvas and all its children
+        def bind_mousewheel(widget):
+            widget.bind("<MouseWheel>", _on_mousewheel)
+            for child in widget.winfo_children():
+                bind_mousewheel(child)
+                
+        bind_mousewheel(scrollable_frame)
+        
+        # Create main frame inside scrollable area with proper theming
+        main_frame = ttk.Frame(scrollable_frame, padding=0, style='TFrame')
+        main_frame.pack(fill="both", expand=True)
+        
+        # Create a container frame for the notebook to control the border
+        notebook_container = ttk.Frame(main_frame, style='TFrame')
+        notebook_container.pack(fill="both", expand=True, padx=0, pady=0)
+        
+        # Create the notebook with proper theming
+        self.notebook = ttk.Notebook(notebook_container, style='TNotebook')
+        
+        # Configure tab style
+        style.configure('TNotebook.Tab', 
+                      background=self.theme_colors["button_bg"],
+                      foreground=self.theme_colors["text"],
+                      padding=[15, 5],
+                      font=('Segoe UI', 10, 'bold'))
+                      
+        style.map('TNotebook.Tab', 
+                background=[('selected', self.theme_colors["accent"])],
+                foreground=[('selected', ThemeColors.get_button_text_color(self.current_theme, "accent"))])
+        
+        # Create a frame for the tab content container
+        tab_content_container = ttk.Frame(notebook_container, style='TFrame')
+        
+        # Pack the notebook and container
+        self.notebook.pack(fill="both", expand=True, padx=0, pady=0)
+        
+        # Create a frame for the themes tab with zero padding
+        self.themes_frame = ttk.Frame(self.notebook, style='TFrame')
+        self.notebook.add(self.themes_frame, text='Themes')
+        
+        # Configure the border style first
+        style = ttk.Style()
+        style.configure('Border.TFrame', background=self.theme_colors["accent"])
+        
+        # Create a container frame that will fill the tab
+        container = ttk.Frame(self.themes_frame, style='TFrame')
+        container.pack(fill="both", expand=True, padx=0, pady=0)
+        
+        # Create a border frame with accent color
+        border_frame = ttk.Frame(
+            container,
+            style='Border.TFrame',
+            padding=1
+        )
+        border_frame.pack(fill="both", expand=True, padx=0, pady=0)
+        
+        # Create the main content frame inside the border
+        self.content_area = ttk.Frame(
+            border_frame,
+            style='TFrame',
+            padding=15
+        )
+        self.content_area.pack(fill="both", expand=True, padx=0, pady=0)
+        
+        # Create a frame for the theme selection widgets
+        self.themes_content = ttk.Frame(
+            self.content_area,
+            style='TFrame'
+        )
+        self.themes_content.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Add a small border at the bottom of the tab content
+        bottom_border = ttk.Frame(
+            self.content_area,
+            style='Border.TFrame',
+            height=1
+        )
+        bottom_border.pack(side="bottom", fill="x", padx=0, pady=(0, 15))
+        
+        # Create a small padding frame at the bottom
+        bottom_padding = ttk.Frame(
+            self.content_area,
+            style='TFrame',
+            height=10
+        )
+        bottom_padding.pack(side="bottom", fill="x")
+        
+        # Populate tabs
+        self.populate_themes_tab()
+        
+        # Button frame with adjusted vertical padding
+        button_frame = tk.Frame(main_container, bg=self.theme_colors["secondary_bg"])
+        button_frame.pack(fill="x", pady=(10, 5))  # Reduced top padding from 20 to 10, bottom from 0 to 5
+        
+        # Apply button
+        apply_button = HoverButton(
+            button_frame,
+            text="Apply",
+            command=self.apply_changes,
+            bg=self.theme_colors["accent"],
+            fg=ThemeColors.get_button_text_color(self.current_theme, "accent"),
+            relief="flat",
+            font=("Segoe UI", 11),
+            width=10
+        )
+        apply_button.pack(side=tk.RIGHT, padx=5)
+        
+        # OK button
+        ok_button = HoverButton(
+            button_frame,
+            text="OK",
+            command=self.save_and_close,
+            bg=self.theme_colors["button_bg"],
+            fg=ThemeColors.get_button_text_color(self.current_theme, "default"),
+            relief="flat",
+            font=("Segoe UI", 11),
+            width=10
+        )
+        ok_button.pack(side=tk.RIGHT, padx=5)
+        
+        # Cancel button
+        cancel_button = HoverButton(
+            button_frame,
+            text="Cancel",
+            command=self.destroy,
+            bg=self.theme_colors["button_bg"],
+            fg=ThemeColors.get_button_text_color(self.current_theme, "default"),
+            relief="flat",
+            font=("Segoe UI", 11),
+            width=10
+        )
+        cancel_button.pack(side=tk.LEFT, padx=5)
+        
+        # Center the window
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
+    
+    def populate_themes_tab(self):
+        theme = self.theme_colors
+        
+        # Configure the style for the labelframe first
+        style = ttk.Style()
+        style.configure('TLabelframe',
+                      background=theme["secondary_bg"],
+                      bordercolor=theme["accent"])
+        style.configure('TLabelframe.Label',
+                      background=theme["secondary_bg"],
+                      foreground=theme["text"],
+                      font=('Segoe UI', 10, 'bold'))
+        
+        # Create a container frame for the theme options
+        container = ttk.Frame(self.themes_content, style='TFrame')
+        container.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Theme Selection
+        theme_frame = ttk.LabelFrame(
+            container,
+            text="Interface Theme",
+            padding=15,
+            style='TLabelframe'
+        )
+        theme_frame.pack(fill="x", pady=(0, 20))
+        
+        # Create a frame for theme options
+        themes_container = ttk.Frame(theme_frame, style='TFrame')
+        themes_container.pack(fill="x", expand=True, pady=(5, 0))
+        
+        # Get available themes
+        available_themes = list(ThemeColors.THEMES.keys())
+        
+        # Create radio buttons for each theme
+        self.theme_var = tk.StringVar(value=self.current_theme)
+        
+        for theme_name in available_themes:
+            radio_frame = ttk.Frame(themes_container, style='TFrame')
+            radio_frame.pack(fill="x", pady=4, anchor="w")
+            
+            radio = tk.Radiobutton(
+                radio_frame,
+                text=theme_name,
+                variable=self.theme_var,
+                value=theme_name,
+                bg=theme["secondary_bg"],
+                fg=theme["text"],
+                selectcolor=theme["accent"],
+                activebackground=theme["secondary_bg"],
+                activeforeground=theme["text"],
+                font=("Segoe UI", 10),
+                padx=10,
+                pady=2,
+                command=self.on_theme_change
+            )
+            radio.pack(side="left", anchor="w")
+    
+    def on_theme_change(self):
+        # Update the current theme
+        new_theme = self.theme_var.get()
+        self.current_theme = new_theme
+        self.theme_colors = ThemeColors.THEMES[new_theme]
+        
+        # Update the window colors
+        self.configure(bg=self.theme_colors["secondary_bg"])
+        self.update_widget_colors(self)
+        
+        # Update the notebook style
+        style = ttk.Style()
+        style.configure('TNotebook', background=self.theme_colors["secondary_bg"])
+        style.configure('TNotebook.Tab', 
+                      background=self.theme_colors["button_bg"],
+                      foreground=self.theme_colors["text"],
+                      padding=[10, 5],
+                      font=('Segoe UI', 10, 'bold'))
+        style.map('TNotebook.Tab',
+                background=[('selected', self.theme_colors["accent"])],
+                foreground=[('selected', ThemeColors.get_button_text_color(self.current_theme, "accent"))])
+    
+    def update_widget_colors(self, widget):
+        """Recursively update widget colors based on current theme"""
+        try:
+            if hasattr(widget, 'winfo_children'):
+                for child in widget.winfo_children():
+                    self.update_widget_colors(child)
+            
+            if hasattr(widget, 'configure'):
+                if widget.winfo_class() in ['Frame', 'Labelframe', 'LabelFrame']:
+                    widget.configure(bg=self.theme_colors["secondary_bg"])
+                    if hasattr(widget, 'configure_highlight'):
+                        widget.configure_highlight(
+                            background=self.theme_colors["secondary_bg"],
+                            highlightbackground=self.theme_colors["accent"],
+                            highlightcolor=self.theme_colors["accent"]
+                        )
+                elif widget.winfo_class() == 'Label':
+                    if widget['text'] != 'Interface Theme':  # Skip the label frame title
+                        widget.configure(bg=self.theme_colors["secondary_bg"], fg=self.theme_colors["text"])
+                elif widget.winfo_class() == 'Radiobutton':
+                    widget.configure(
+                        bg=self.theme_colors["secondary_bg"],
+                        fg=self.theme_colors["text"],
+                        selectcolor=self.theme_colors["accent"],
+                        activebackground=self.theme_colors["secondary_bg"],
+                        activeforeground=self.theme_colors["text"]
+                    )
+        except Exception as e:
+            pass
+    
+    def apply_changes(self):
+        # Apply the selected theme to the main application
+        if hasattr(self.parent, 'current_theme'):
+            self.parent.current_theme = self.current_theme
+            self.parent.theme_colors = self.theme_colors
+            
+            # Update the parent's theme
+            if hasattr(self.parent, 'apply_theme'):
+                self.parent.apply_theme()
+                
+            # Update the settings window's theme
+            self.current_theme = self.current_theme
+            self.theme_colors = ThemeColors.THEMES[self.current_theme]
+            self.configure(bg=self.theme_colors["secondary_bg"])
+            
+            # Update the notebook style
+            style = ttk.Style()
+            style.configure('TNotebook', background=self.theme_colors["secondary_bg"])
+            style.configure('TNotebook.Tab', 
+                          background=self.theme_colors["button_bg"],
+                          foreground=self.theme_colors["text"],
+                          padding=[10, 5],
+                          font=('Segoe UI', 10, 'bold'))
+            style.map('TNotebook.Tab',
+                    background=[('selected', self.theme_colors["accent"])],
+                    foreground=[('selected', ThemeColors.get_button_text_color(self.current_theme, "accent"))])
+            
+            # Update all widgets in the settings window
+            self.update_widget_colors(self)
+    
+    def save_and_close(self):
+        # Apply changes and close the window
+        self.apply_changes()
+        self.destroy()
+
+# Help window class
+class HelpWindow(tk.Toplevel):
+    def __init__(self, parent, theme_colors, current_theme_name):
+        super().__init__(parent)
+        self.parent = parent
+        self.theme_colors = theme_colors
+        self.current_theme_name = current_theme_name
+        self.title("Need Help?")
+        self.configure(bg=self.theme_colors[self.current_theme_name]["secondary_bg"])
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        self.focus_set()
+        
+        # Make window modal
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+
+        # Content frame
+        content_frame = tk.Frame(self, bg=self.theme_colors[self.current_theme_name]["secondary_bg"], padx=20, pady=15)
+        content_frame.pack(expand=True, fill="both")
+        content_frame.columnconfigure(0, weight=1)
+
+        # Help text
+        help_text = """    Need Help using FFE?
+
+     Head to the FFE GitHub:
+     github.com/AVXAdvanced/FFE
+
+     Then head to one of these tabs for help:
+
+      - Discussions (Ask Questions)
+      - Wiki (Read Documentations)
+      - Issues (Report an Issue with FFE)
+
+     We recommend you head to the Wiki first.
+     If you can't find anything there, head to
+     discussions. If that doesn't yield results head
+     to the Issues tab.
+
+     Someone from the FFE community will surely be able to 
+     help!
+
+     Would you like to head to the FFE GitHub now?"""
+
+        help_label = tk.Label(content_frame, text=help_text,
+                           bg=self.theme_colors[self.current_theme_name]["secondary_bg"],
+                           fg=self.theme_colors[self.current_theme_name]["text"],
+                           font=("Segoe UI", 10),
+                           justify="left",
+                           anchor="w")
+        help_label.pack(pady=(0, 15), fill='x')
+
+        # Button frame
+        button_frame = tk.Frame(content_frame, bg=self.theme_colors[self.current_theme_name]["secondary_bg"])
+        button_frame.pack(fill='x', pady=(10, 5))
+
+        # Yes button - Open GitHub
+        yes_button = HoverButton(
+            button_frame,
+            text="Yes",
+            command=self.open_github,
+            bg=self.theme_colors[self.current_theme_name]["accent"],
+            fg=ThemeColors.get_button_text_color(self.current_theme_name, "accent"),
+            relief="flat",
+            font=("Segoe UI", 11),
+            width=10
+        )
+        yes_button.pack(side=tk.LEFT, padx=5, expand=True, fill='x')
+        
+        # No button - Close window
+        no_button = HoverButton(
+            button_frame,
+            text="No",
+            command=self.destroy,
+            bg=self.theme_colors[self.current_theme_name]["button_bg"],
+            fg=ThemeColors.get_button_text_color(self.current_theme_name, "default"),
+            relief="flat",
+            font=("Segoe UI", 11),
+            width=10
+        )
+        no_button.pack(side=tk.RIGHT, padx=5, expand=True, fill='x')
+        
+        # Center the window
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
+    
+    def open_github(self):
+        """Open the FFE GitHub page in the default web browser."""
+        webbrowser.open_new("https://github.com/AVXAdvanced/FFE")
+        self.destroy()
+
+# About window class
+class AboutWindow(tk.Toplevel):
+    def __init__(self, parent, theme_colors, current_theme_name):
+        super().__init__(parent)
+        self.parent = parent
+        self.theme_colors = theme_colors
+        self.current_theme_name = current_theme_name
+        self.title("About FFE")
+        self.configure(bg=self.theme_colors[self.current_theme_name]["secondary_bg"])
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        self.focus_set()
+        
+        # Make window modal
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+
+        # Content frame
+        content_frame = tk.Frame(self, bg=self.theme_colors[self.current_theme_name]["secondary_bg"], padx=20, pady=15)
+        content_frame.pack(expand=True, fill="both")
+        content_frame.columnconfigure(0, weight=1)
+
+        # About text with social links
+        about_text = """Friend File Encryptor
+
+Version 3.0.0 
+Build: ffe_070525_300_lyra
+MFHC: NeoIFEC 1.0.0
+Build Date: 7/5/2025
+Windows Edition
+
+"Begging for less compiler errors"
+
+Social Links:
+
+GitHub: github.com/AVXAdvanced/FFE
+Dev GitHub: github.com/AVXAdvanced/FFE-Development
+Twitter/X: x.com/ffe_world
+ProductHunt: producthunt.com/products/ffe
+
+Made with <3 by AVX_Advanced"""
+
+        about_label = tk.Label(content_frame, 
+                            text=about_text,
+                            bg=self.theme_colors[self.current_theme_name]["secondary_bg"],
+                            fg=self.theme_colors[self.current_theme_name]["text"],
+                            font=("Segoe UI", 10),
+                            justify="left",
+                            anchor="w")
+        about_label.pack(pady=(0, 15), fill='x')
+
+        # Button frame
+        button_frame = tk.Frame(content_frame, bg=self.theme_colors[self.current_theme_name]["secondary_bg"])
+        button_frame.pack(fill='x', pady=(10, 5))
+
+        # OK button - Close window
+        ok_button = HoverButton(
+            button_frame,
+            text="OK",
+            command=self.destroy,
+            bg=self.theme_colors[self.current_theme_name]["accent"],
+            fg=ThemeColors.get_button_text_color(self.current_theme_name, "accent"),
+            relief="flat",
+            font=("Segoe UI", 11)
+        )
+        ok_button.pack(fill='x')
+        
+        # Center the window
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
+
+# key gen - dne/only on enc upd/chg
+
+def fesys_gen_key():
+    return Fernet.generate_key()
+ 
+# key file save -- fesys_gen key -> key -> fesys_save_key -> main_key.key
+# dne/chg with fesys_gen_key (link)
+
+def fesys_save_key(key, filename):
+    with open(filename, "wb") as key_file:
+        key_file.write(key)
+
+def fesys_encrypt_file(file_path, main_key):
+    try:
+        cipher_main = Fernet(main_key)
+        new_key = Fernet.generate_key()
+        cipher_file = Fernet(new_key)
+
+        with open(file_path, "rb") as file:
+            file_data = file.read()
+        encrypted_data = cipher_file.encrypt(file_data)
+        encrypted_key = cipher_main.encrypt(new_key)
+        encrypted_file_path = file_path + ".enc"
+
+        with open(encrypted_file_path, "wb") as encrypted_file:
+            encrypted_file.write(encrypted_data + b"|||" + encrypted_key)
+
+        return f"File '{os.path.basename(file_path)}' successfully encrypted!"
+    except Exception as e:
+        return f"Error during encryption: {str(e)}"
+
+def fesys_decrypt_file(file_path, main_key):
+    try:
+        if not file_path.endswith(".enc"):
+            return "Only .enc files can be decrypted."
+
+        cipher_main = Fernet(main_key)
+
+        with open(file_path, "rb") as encrypted_file:
+            full_encrypted_data = encrypted_file.read()
+
+        try:
+            encrypted_data, encrypted_key = full_encrypted_data.split(b"|||")
+        except ValueError:
+            return "Error: Encrypted file is corrupted or not in the correct format."
+
+        decrypted_key = cipher_main.decrypt(encrypted_key)
+        cipher_file = Fernet(decrypted_key)
+        decrypted_data = cipher_file.decrypt(encrypted_data)
+        decrypted_file_path = file_path[:-4]
+
+        with open(decrypted_file_path, "wb") as decrypted_file:
+            decrypted_file.write(decrypted_data)
+
+        return f"File '{os.path.basename(file_path[:-4])}' successfully decrypted!"
+    except Exception as e:
+        return f"Error during decryption: {str(e)}"
+
+# button lt up
+# todo: perf/func opt
+
+# main class - do not edit
+# todo: clean up/opt
+
+class FFEApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Friend File Encryptor - Version 2.0.1")
+        self.geometry("1070x700")
+        
+        # Set default theme
+        self.current_theme = "Dark Blue"
+        self.theme_colors = ThemeColors.THEMES[self.current_theme]
+        
+        # Configure window with theme colors
+        self.configure(bg=self.theme_colors["primary_bg"])
+        self.minsize(1070, 700)
+
+        self.main_key = self.load_main_key()
+       
+        self.current_path = "C:/"
+        self.history = [self.current_path]
+        self.history_index = 0
+        self.file_listbox = tk.Listbox(self, 
+                                     bg=self.theme_colors["secondary_bg"], 
+                                     fg=self.theme_colors["text"], 
+                                     selectmode=tk.SINGLE, 
+                                     font=("Segoe UI", 12),
+                                     selectbackground=self.theme_colors["accent"], 
+                                     selectforeground="white")
+        self.file_listbox.bind("<Double-1>", self.file_dc_act)
+        self.create_widgets()
+        self.acc_files()
+        self.decrypting = False
+        self.hovered_index = None
+        self.brighten_factor = 20
+
+        self.ffe_websrv_chk("https://www.github.com/AVXAdvanced/FFE", self.no_ffe_web)
+
+    def no_ffe_web(self):
+        messagebox.showwarning("Online Features Unavailable", """FFE's Online Features aren't available.
+
+This means that certain features such as Updates may
+not be available. 
+
+This problem may be caused by the following:
+
+- You aren't connected to the Internet
+- You're using a VPN
+- Your Internet Settings are misconfigured
+- GitHub is experiencing issues
+- The FFE GitHub is unavailable 
+
+Check the items listed above. If you
+cannot resolve the issue yourself,
+try again later.
+
+Error Code: FxNG82933217
+
+You can continue using FFE while Online Features are unavailable.
+If this issue persists, please open an issue on GitHub.
+        """)
+        
+    def show_settings(self):
+        """Open the settings window with the current theme applied"""
+        SettingsWindow(self)
+    
+    def show_help(self):
+        """Show the Help dialog"""
+        help_text = """Friend File Encryptor - Help
+
+Encrypt a File:
+1. Select a file from the list
+2. Click 'Encrypt' button
+3. The encrypted file will be saved with .enc extension
+
+Decrypt a File:
+1. Select a .enc file from the list
+2. Click 'Decrypt' button
+3. The decrypted file will be saved without the .enc extension
+
+Other Features:
+- Use the navigation buttons to browse folders
+- Use the drive selector to switch between drives
+- Click 'Update' to check for application updates
+- Click 'Settings' to change application theme
+- Click 'About' for version information
+
+For more help, please visit:
+github.com/AVXAdvanced/FFE"""
+        
+        help_window = tk.Toplevel(self)
+        help_window.title("FFE Help")
+        help_window.configure(bg=self.theme_colors["secondary_bg"])
+        help_window.resizable(False, False)
+        
+        # Make window modal
+        help_window.transient(self)
+        help_window.grab_set()
+        
+        text = tk.Text(
+            help_window,
+            wrap=tk.WORD,
+            bg=self.theme_colors["secondary_bg"],
+            fg=self.theme_colors["text"],
+            font=("Segoe UI", 11),
+            padx=15,
+            pady=15,
+            relief="flat"
+        )
+        text.insert(tk.END, help_text)
+        text.config(state=tk.DISABLED)
+        text.pack(expand=True, fill=tk.BOTH)
+        
+        # Center the window
+        help_window.update_idletasks()
+        width = 500
+        height = 400
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        help_window.geometry(f'{width}x{height}+{x}+{y}')
+        
+        # Close button
+        button_frame = tk.Frame(help_window, bg=self.theme_colors["secondary_bg"])
+        button_frame.pack(fill=tk.X, padx=15, pady=(0, 15))
+        
+        close_button = HoverButton(
+            button_frame,
+            text="Close",
+            command=help_window.destroy,
+            bg=self.theme_colors["accent"],
+            fg=ThemeColors.get_button_text_color(self.current_theme, "accent"),
+            relief="flat",
+            font=("Segoe UI", 11)
+        )
+        close_button.pack(side=tk.RIGHT)
+        
+        # Set focus to close button for better keyboard navigation
+        close_button.focus_set()
+        
+    def show_about(self):
+        """Show the About dialog"""
+        AboutWindow(self, self.theme_colors, self.current_theme)
+    
+    def ffe_websrv_chk(self, url, on_failure):
+        def check_web():
+          try:
+             requests.get(url, timeout=4.273)
+          except requests.exceptions.RequestException as e:
+             self.after(0, on_failure) 
+
+        thread = threading.Thread(target=check_web)
+        thread.daemon = True  
+        thread.start()
+
+    def brighten_color(self, color_hex, factor):
+        if isinstance(color_hex, str) and color_hex.startswith("#") and len(color_hex) == 7:
+            try:
+                r, g, b = tuple(int(color_hex[i:i+2], 16) for i in (1, 3, 5))
+                r = min(255, r + factor)
+                g = min(255, g + factor)
+                b = min(255, b + factor)
+                return f"#{r:02x}{g:02x}{b:02x}"
+            except ValueError:
+                return color_hex
+        return color_hex
+
+    def on_select(self, event):
+        try:
+            selected_index = self.file_listbox.curselection()[0]
+            file_path = self.file_paths[selected_index]
+            # You could do something here based on the selected file if you want
+            self.status_label.config(text=f"Selected: {os.path.basename(file_path)}")
+            pass 
+
+        except IndexError:
+            pass 
+
+    def fesys_load_key(self, filename):
+        with open(filename, "rb") as key_file:
+            return key_file.read()
+
+    # ffe ui loader
+    # n/n upd on rebuild
+
+    def create_tooltip(self, widget, text):
+        """Create a tooltip for a given widget that appears after a delay."""
+        tooltip = tk.Toplevel(widget)
+        tooltip.withdraw()
+        tooltip.overrideredirect(True)
+        tooltip.configure(background='#fffedc', relief='solid', borderwidth=1)
+        
+        label = tk.Label(tooltip, text=text, justify='left',
+                        background='#fffedc', relief='solid', borderwidth=1,
+                        padx=2, pady=2, font=('Segoe UI', 9))
+        label.pack()
+        
+        # Store the scheduled event ID
+        widget.tooltip_scheduled = None
+        
+        def show_tooltip():
+            if not widget.winfo_ismapped():
+                return
+            x = widget.winfo_rootx() + widget.winfo_width() + 5
+            y = widget.winfo_rooty()
+            tooltip.geometry(f'+{x}+{y}')
+            tooltip.deiconify()
+            widget.tooltip_scheduled = None
+        
+        def enter(event):
+            # Cancel any pending tooltip show if mouse re-enters quickly
+            if widget.tooltip_scheduled is not None:
+                widget.after_cancel(widget.tooltip_scheduled)
+            # Schedule the tooltip to show after 700ms
+            widget.tooltip_scheduled = widget.after(500, show_tooltip)
+            
+        def leave(event):
+            # Cancel any pending tooltip show
+            if widget.tooltip_scheduled is not None:
+                widget.after_cancel(widget.tooltip_scheduled)
+                widget.tooltip_scheduled = None
+            tooltip.withdraw()
+            
+        widget.bind('<Enter>', enter)
+        widget.bind('<Leave>', leave)
+        widget.bind('<ButtonPress>', lambda e: tooltip.withdraw())
+        return tooltip
+
+    def create_widgets(self):
+        """Create and configure the main application widgets."""
+        # Create a frame for the toolbar with matching horizontal padding
+        toolbar = tk.Frame(self, bg="#0a1124")
+        toolbar.pack(fill=tk.X, padx=14)
+        toolbar.columnconfigure(2, weight=1)
+        
+        # Create an inner frame to hold the toolbar items
+        toolbar_inner = tk.Frame(toolbar, bg="#0a1124")
+        toolbar_inner.pack(fill=tk.X, expand=True)
+
+        # Navigation buttons
+        self.back_button = HoverButton(
+            toolbar, 
+            text=" Back ", 
+            command=self.go_back, 
+            state=tk.DISABLED,
+            bg="#203161", 
+            fg="white", 
+            activebackground="#2a4180",
+            activeforeground="white",
+            relief="flat", 
+            font=("Segoe UI", 11),
+            borderwidth=0,
+            highlightthickness=0,
+            padx=10,
+            pady=5
+        )
+        self.back_button.pack(side=tk.LEFT, padx=1, pady=(10, 2), in_=toolbar_inner)  # 10px top padding for vertical centering
+        self.create_tooltip(self.back_button, "Go back to the previous directory")
+
+        self.forward_button = HoverButton(
+            toolbar, 
+            text=" Forward ", 
+            command=self.go_forward,
+            state=tk.DISABLED,
+            bg="#203161",
+            fg="white",
+            activebackground="#2a4180",
+            activeforeground="white",
+            relief="flat",
+            font=("Segoe UI", 11),
+            borderwidth=0,
+            highlightthickness=0,
+            padx=10,
+            pady=5
+        )
+        self.forward_button.pack(side=tk.LEFT, padx=1, pady=(10, 2), in_=toolbar_inner)  # 10px top padding for vertical centering
+        self.create_tooltip(self.forward_button, "Go forward to the next directory")
+
+        # Drive selector
+        self.drive_selector = tk.StringVar(value=self.current_path)
+        self.drive_menu = tk.OptionMenu(
+            toolbar, 
+            self.drive_selector, 
+            *self.acc_hdd(), 
+            command=self.update_drive
+        )
+        self.drive_menu["menu"].config(
+            bg="#203161", 
+            fg="white", 
+            relief="flat", 
+            font=("Segoe UI", 11)
+        )
+        self.drive_menu.config(
+            bg="#203161", 
+            fg="white", 
+            font=("Segoe UI", 11), 
+            relief="flat"
+        )
+        # Align drive selector with buttons
+        self.drive_menu.pack(side=tk.LEFT, padx=10, pady=(10, 2), in_=toolbar_inner, expand=True, fill=tk.X)
+        self.create_tooltip(self.drive_menu, "Select a drive to browse")
+
+        # File list
+        self.file_listbox = tk.Listbox(
+            self, 
+            bg="#0f1936", 
+            fg="white", 
+            selectmode=tk.SINGLE, 
+            font=("Segoe UI", 12),
+            selectbackground="#2a4180", 
+            selectforeground="white"
+        )
+        self.file_listbox.pack(pady=8, padx=15, expand=True, fill=tk.BOTH)
+        self.file_listbox.bind("<Double-1>", self.file_dc_act)
+
+        # Action buttons with consistent styling
+        buttons = [
+            (" Encrypt ", self.encrypt_file, "#469c57", "Encrypt the selected file"),
+            (" Decrypt ", self.decrypt_file, "#469c57", "Decrypt the selected .enc file"),
+            (" Delete ", self.del_f, "#bf3e3b", "Delete the selected file or folder"),
+            (" Update ", self.update_ffe, "#203161", "Check for updates"),
+            (" Settings ", self.show_settings, "#203161", "Application settings"),
+            (" Help ", self.show_help, "#203161", "Show help information"),
+            (" About ", self.show_about, "#203161", "About Friend File Encryptor")
+        ]
+
+        for text, command, color, tooltip in buttons:
+            btn = HoverButton(
+                toolbar, 
+                text=text, 
+                command=command, 
+                bg=color,
+                fg="white",
+                activebackground=self.brighten_color(color, 20),
+                activeforeground="white",
+                relief="flat",
+                font=("Segoe UI", 11),
+                borderwidth=0,
+                highlightthickness=0,
+                padx=10,
+                pady=5
+            )
+            btn.pack(side=tk.LEFT, padx=1, pady=(10, 2), in_=toolbar_inner)  # 10px top padding for vertical centering
+            self.create_tooltip(btn, tooltip)
+
+        self.status_label = tk.Label(self, text="Select a file to encrypt. Double click folders to navigate.", bg="#0a1124", fg="white", font=("Segoe UI", 11)) 
+        self.status_label.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+
+    def acc_hdd(self): 
+     drives = [chr(drive) + ":\\" for drive in range(65, 91) if os.path.exists(chr(drive) + ":\\")]
+     return drives
+
+    # ffe_access_files def - load listbox files
+    # i/u with file_dc_act
+
+    def del_f(self):
+        """Delete the selected file or folder"""
+        try:
+            selected_index = self.file_listbox.curselection()[0]
+            full_path = self.file_paths[selected_index]
+
+            if os.path.isdir(full_path):
+                messagebox.showerror("Nope", "Cannot delete a directory. Please select a file.")
+                return
+
+            if os.path.exists(full_path):
+                confirm = messagebox.askyesno(
+                    "Are you sure?",
+                    f"Are you sure you want to delete '{os.path.basename(full_path)}'?"
+                )
+                if confirm:
+                    try:
+                        if os.path.isdir(full_path):
+                            os.rmdir(full_path)
+                        else:
+                            os.remove(full_path)
+                        self.status_label.config(text=f"Successfully deleted: {os.path.basename(full_path)}")
+                        self.acc_files()
+                    except OSError as e:
+                        messagebox.showerror("Error", f"Failed to delete: {str(e)}")
+            else:
+                messagebox.showerror("Error", "File not found. It may have been moved or deleted.")
+        except IndexError:
+            messagebox.showerror("Error", "Please select a file to delete.")
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+    def acc_files(self):
+     try:
+        self.file_listbox.delete(0, tk.END)
+        file_paths = []
+        display_names = []
+
+        for entry in os.listdir(self.current_path):
+            full_path = os.path.join(self.current_path, entry)
+
+            if entry.startswith('.') or (os.name == 'nt' and os.stat(full_path).st_file_attributes & 2):
+                continue
+
+            if os.path.isdir(full_path):
+                display_name = f"📁 {entry}/"
+            elif entry.endswith(".enc"):
+                display_name = f"🔒 {entry}"
+            else:
+                display_name = f"📄 {entry}"
+
+            display_names.append(display_name)
+            file_paths.append(full_path)
+
+        for name in display_names:
+            self.file_listbox.insert(tk.END, name)
+
+        self.file_paths = file_paths
+        self.status_label.config(text=f"Showing files in {self.current_path}")
+        self.back_button.config(state=tk.NORMAL if self.history_index > 0 else tk.DISABLED)
+        self.forward_button.config(state=tk.NORMAL if self.history_index < len(self.history) - 1 else tk.DISABLED)
+     except Exception as e:
+        messagebox.showerror("Error", f"Failed to load files: {str(e)}")
+
+    # listbox doubleclick check/init (on act enbl)
+
+    def file_dc_act(self, event): #file doubleclick act (on act enbl)
+     try:
+        selected_index = self.file_listbox.curselection()[0]
+        full_path = self.file_paths[selected_index]
+
+        if os.path.isfile(full_path):
+            self.status_label.config(text=f"Selected file: {full_path}")
+        elif os.path.isdir(full_path):
+            self.current_path = full_path
+            self.history.append(self.current_path)
+            self.history_index += 1
+            self.acc_files()
+        else:
+            messagebox.showerror("Error", f"Invalid selection: {self.file_listbox.get(selected_index)}")
+
+     except IndexError:
+        pass # No selection, so nothing to do
+     except Exception as e:
+        messagebox.showerror("Error", f"Failed to open file: {str(e)}")
+
+    def go_back(self):
+        if self.history_index > 0:
+            self.history_index -= 1
+            self.current_path = self.history[self.history_index]
+            self.acc_files()
+
+    def go_forward(self):
+        if self.history_index < len(self.history) - 1:
+            self.history_index += 1
+            self.current_path = self.history[self.history_index]
+            self.acc_files()
+
+    def update_drive(self, new_drive):
+     self.current_path = new_drive
+     self.history = [new_drive]  # Directly set the history with the new path
+     self.history_index = 0
+     self.acc_files()
+
+    def load_main_key(self):
+        if not os.path.exists("main_key.key"):
+            key = Fernet.generate_key()
+            with open("main_key.key", "wb") as key_file:
+                key_file.write(key)
+            messagebox.showwarning("Key File Missing", """FFE has created a new Key File.
+
+FFE couldn't find your Key File, so a new one was created.
+If you think this is a mistake, please
+check the following:
+
+- Is your Key File in the same directory as "FFE.exe"?
+- Is your Key File named "main_key.key"?
+- Is your Key File corrupted?
+
+If you've just opened FFE, this is normal 
+and you can simply ignore this warning.
+            """)
+        key = self.fesys_load_key("main_key.key")
+        return key
+
+    def encrypt_file(self):
+        try:
+            selected_index = self.file_listbox.curselection()[0]
+            full_path = self.file_paths[selected_index]
+
+            if os.path.isdir(full_path):
+                messagebox.showerror("Nope", "Can't encrypt a directory. Select a file.")
+                return
+
+            result = fesys_encrypt_file(full_path, self.main_key) 
+            self.status_label.config(text=result)
+            self.acc_files()
+
+        except IndexError:
+            messagebox.showerror("Where'd it go?", "File? I don't see no file. Select a file before trying to work with it...")
+        except Exception as e:
+            messagebox.showerror("Nope", f"Welp, we couldn't encrypt that one: {str(e)}")
+
+    def decrypt_file(self):
+        if self.decrypting:
+            return
+        self.decrypting = True
+
+        try:
+            selected_index = self.file_listbox.curselection()[0]
+            full_path = self.file_paths[selected_index]
+
+            if os.path.isdir(full_path):
+                messagebox.showerror("Nope", "Can't decrypt a directory. Please Select a file.")
+                self.decrypting = False
+                return
+
+            if not full_path.endswith(".enc"):
+                messagebox.showerror("Nope", "Only .enc files can be decrypted.")
+                self.decrypting = False
+                return
+
+            result = fesys_decrypt_file(full_path, self.main_key) 
+            self.status_label.config(text=result)
+            self.acc_files()
+
+        except IndexError:
+            messagebox.showerror("Where'd it go?", "File? I don't see no file. Select a file before trying to work with it...")
+        except Exception as e:
+            messagebox.showerror("Nope", f"Failed to decrypt file: {str(e)}")
+        finally:
+            self.decrypting = False
+
+        try:
+            selected_index = self.file_listbox.curselection()[0]
+            full_path = self.file_paths[selected_index]
+
+            if os.path.isdir(full_path):
+                messagebox.showerror("Nope", "Cannot delete a directory. Please Select a file.")
+                return
+
+            if os.path.exists(full_path):
+                confirm = messagebox.askyesno("Sure?", f"Do you really want to get rid of '{os.path.basename(full_path)}'?")
+                if confirm:
+                    os.remove(full_path)
+                    self.status_label.config(text=f"Yay it's gone.. one could say it's deleted!")
+                    self.acc_files()
+            else:
+                messagebox.showerror("Where'd it go?", "We couldn't find that file. You might not have sufficient permissions to modify it.")
+
+        except IndexError:
+            messagebox.showerror("Where'd it go?", "File? I don't see no file. Select a file before trying to work with it...")
+        except Exception as e:
+            messagebox.showerror("Nope", f"Guess that one's staying. Couldn't delete {str(e)}")
+
+    # ffe update def - todo: chk "utd" msg
+    # upd v num on rebuild
+
+    def update_ffe(self):
+        
+        try:
+           current_version = "2.0.1"
+
+           url = f"https://api.github.com/repos/AVXAdvanced/FFE/releases/latest"
+           response = requests.get(url)
+           response.raise_for_status()
+
+           latest_release = response.json()
+           release_name = latest_release["name"]
+           match = re.search(r"Version (\d+\.\d+\.\d+)", release_name)
+
+           if match:
+               latest_version = match.group(1)
+           else:
+            result = messagebox.askyesno(
+                "Update Error",
+                """Something went wrong, and we couldn't check for updates.
+
+                Would you like to open the FFE GitHub in your Web Browser
+                to check for updates manually?
+                
+                """
+            )
+            if result:
+                webbrowser.open("https://github.com/FFE/AVXAdvanced")
+            return
+
+           if version.parse(latest_version) > version.parse(current_version):
+               confirm = messagebox.askyesno("Update Available", f"""Version {latest_version} is available. 
+               
+We recommend updating to get the best experience.
+
+The New Installer will be downloaded to your
+downloads folder. By default this is:
+
+C:/Users/[YOUR USERNAME]/Downloads
+
+Double-Click the Installer to Update FFE.
+
+Would you like to download the update now?
+""")
+               if confirm:
+                   asset_url = latest_release["assets"][0]["browser_download_url"]
+                   filename = latest_release["assets"][0]["name"]
+                   download_path = os.path.join(os.path.expanduser("~"), "Downloads", filename) 
+               else:
+                   print("")
+           else:
+               messagebox.showinfo("Hurray", "You're all set! No updates are currently available.")
+
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Update Error", f"An error occurred. Head to github.com/FFE/AVXAdvanced to check for updates manually. Error Code: {e}")
+            self.status_label.config(text=f"Error checking updates: {e}")
+        except KeyError as e:
+            messagebox.showerror("Update Error", f"An error occurred. Head to github.com/FFE/AVXAdvanced to check for updates manually. Error Code: {e}")
+            self.status_label.config(text=f"Error parsing GitHub API: {e}")
+        except Exception as e:
+            messagebox.showerror("Update Error", f"An error occurred. Head to github.com/FFE/AVXAdvanced to check for updates manually. Error Code: {e}")
+            self.status_label.config(text=f"An unexpected error occurred: {e}")
+
+if __name__ == "__main__":
+    app = FFEApp()
+    app.mainloop()
