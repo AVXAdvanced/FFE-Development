@@ -157,6 +157,8 @@ def fesys_decrypt_file(file_path, keys):
 """)
       
 # C/O        
+# <3 lyee (definitely not related to me almost having a heart attack in school)
+
 
 def fesys_load_keys():
     if os.path.exists("keys.json"):
@@ -279,6 +281,8 @@ def ffe_invld_opt():
 
 # If you're reading this, that means you actually took time to look through FFE's code. Nice! 
 # (Un)Strategically placed by AVX_Advanced 
+
+
 
 def ffe_main_menu():
     clear_console()
