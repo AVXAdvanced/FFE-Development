@@ -4,13 +4,16 @@
 
 ## Introduction
 
-The FFE-Development GitHub is a place where you can check out some In-Development version of FFE.
+This repository is intended to store loose FFE files, such as Beta Builds, Internal Builds, 
+and old files.
 
-You'll need to compile these versions into an .exe file yourself, or just run them
-as a .py file, if you have Python installed on your computer.
+Note that files here are in either the ".py" or the ".pyw" format. Both of these require you to have a recent
+version of python installed. The difference between ".py" and ".pyw" is that a normal ".py" file will always
+spawn a Command-Line Window, while a ".pyw" file will not. Note, you can run LYNA and LYRA builds as ".py" AND ".pyw" (use ".py" for debugging),
+though Legacy (LYEE) builds can only reliably run in a ".py" file as they are Command-Line Based (TUI).
 
-The FFE-Development GitHub is also used by me to sync my code across devices,
-but you can check those versions out too.
+Further down in this document there are instructions on how to compile ".py" files into ".exe" (Windows Executable) Files.
+
 
 ## Warnings
 
@@ -57,37 +60,53 @@ There you should find a file with the same name as the one you inputted, just wi
 
 **DONE!**
 
-## Release Naming
+## Navigating the Repository
 
-FFE Releases uploaded here have a certain "codename" appended to the filename, which mean different things.
+As you may have noticed, there are a few folders and files in this repository. Here's how to find what you need. 
 
-Example:
+### Files in Root
 
-"ffe_03312025_201_lyra"
+Files in Root refers to files in the root (or top-level) directory of the repository.
 
-Here you can see what they mean.
+The builds located in root are usually currently relevant, like several betas of the same upcoming release for example.
+That might look something like this:
 
-### LYNA
+"ffe_101725_300_01_lyra" - Referring to Beta 1 of Version 300 (aka 3.0.0) built on 101725 (aka 10/17/2025, or the 17th of October 2025).
+"ffe_101925_300_02_lyra" - Referring to Beta 2 of Version 300 (aka 3.0.0) built on 101925 (aka 10/19/2025, or the 19th of October 2025).
+"ffe_102025_300_03_lyra" - Referring to Beta 3 of Version 300 (aka 3.0.0) built on 102025 (aka 10/20/2025, or the 20th of October 2025).
 
-My latest successfully compiled FFE release, used for me to 
-share FFE code across devices.
+Note, files in root may NOT be the newest, though they usually are. They include currently RELEVANT files which are mostly
+new builds, but maybe also other (older) builds that were rediscovered for example.
 
-All LYNA releases are appended with either "LYRA or LYEE".
-Find out what they mean below.
+### LYRA Builds
 
-Example:
+These are any older or currently irrelevant builds relating to FFE "LYRA", aka the official GUI versions (2.0.0 -> Current).
+The naming of these builds is the same as for the root files discussed above.
 
-"ffe_03312025_201_lyna_lyra"
+### LYNA/Aetherion Builds
 
-### LYRA
+Aetherion was an internal project I was working on a while back, trying to add new features to FFE and rebrand it as Aetherion, codename LYNA. 
+These builds are quite interesting to look at, though a lot of LYNA functionality is being ported forward to modern LYRA builds.
+Again, the naming is the same as the root builds.
 
-The latest GUI release for FFE,
-featuring a Graphical User Interface.
+### LYEE Builds
 
-### LYEE
+LYEE Builds are the OG, TUI (Terminal-Based) versions of FFE. These versions are quite old and lacking in functionality at this point,
+though they can be fun to explore to see how FFE evolved over time.
 
-The latest TUI release for FFE,
-featuring a Text-Based User Interface.
+Again, naming works similar to the others, though some very old builds may have slightly different naming.
+
+### Disfunctional Builds
+
+As the name may suggest, these are builds that either dont work at all or are severely limited in functionality. 
+This may also include builds that weren't intended for public use, though have very similar or the same functionality
+as their official counterpart.
+
+For example, a custom build like the LTK (LYRA Transition Kit) may have been based off of official versions such as 1.2.0,
+though the LTK shares identical functionality. It may still be placed here as it is not a release build.
+
+Unlike the others, naming may vary. It should be generally the same, but who knows.
+
 
 **Thanks for Visiting the FFE-Development GitHub Repository.**
 
