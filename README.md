@@ -1,5 +1,7 @@
 # Welcome to the FFE-Development GitHub!
 
+![ffe_gh_dev_banner_v3_usableres](https://drive.google.com/uc?export=view&id=1B8kgW3-AOU5fDS_8X8DFFqxdcHxpQ3mi)
+
 ## Introduction
 
 The FFE-Development GitHub is a place where you can check out some In-Development version of FFE.
